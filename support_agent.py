@@ -1,7 +1,5 @@
 from swarm import Swarm, Agent
 from swarm.repl import run_demo_loop
-import requests
-import sys
 import pandas as pd
 
 
@@ -90,7 +88,7 @@ if __name__ == "__main__":
     context_variables = {}
 
     client = Swarm()
-    print("Starting Swarm CLI")
+    print("Starting CLI")
 
     messages = []
     agent = receptionist_agent
