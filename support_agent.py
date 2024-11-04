@@ -1,6 +1,11 @@
 from swarm import Swarm, Agent
 from swarm.repl import run_demo_loop
 import pandas as pd
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram import Update
+from telegram.ext import ContextTypes
+import os
+from dotenv import load_dotenv
 
 
 def search_customer_by_dni(dni: str) -> dict:
@@ -80,35 +85,86 @@ customer_agent = Agent(
     functions=[transfer_to_receptionist_agent, search_customer_by_dni],
 )
 
-if __name__ == "__main__":
-    # run_demo_loop(receptionist_agent)
 
-    stream = False
-    debug = False
-    context_variables = {}
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja el comando /start"""
+    await update.message.reply_text(
+        "¡Hola! Soy el asistente virtual de la agencia de seguros. ¿En qué puedo ayudarte?"
+    )
 
-    client = Swarm()
-    print("Starting CLI")
 
-    messages = []
-    agent = receptionist_agent
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja los mensajes entrantes de Telegram"""
+    print("Mensaje recibido:", update.message)  # Debug
 
-    while True:
-        user_input = input("\033[90mUser\033[0m: ")
-        messages.append({"role": "user", "content": user_input})
+    # Obtener el mensaje del usuario
+    user_input = update.message.text
+    print("Texto del mensaje:", user_input)  # Debug
+
+    # Verificación más estricta del mensaje
+    if user_input is None or user_input.strip() == "":
+        print("Mensaje vacío detectado")  # Debug
+        await update.message.reply_text("Por favor, envía un mensaje de texto.")
+        return
+
+    # Inicializar el historial de mensajes en el contexto si no existe
+    if "messages" not in context.user_data:
+        context.user_data["messages"] = []
+        print("Inicializando nuevo historial de mensajes")  # Debug
+
+    # Agregar el mensaje del usuario al historial
+    context.user_data["messages"].append({"role": "user", "content": user_input})
+    print("Historial actual:", context.user_data["messages"])  # Debug
+
+    try:
+        client = Swarm()
+        agent = receptionist_agent
 
         response = client.run(
             agent=agent,
-            messages=messages,
-            context_variables=context_variables,
-            stream=stream,
-            debug=debug,
+            messages=context.user_data["messages"],
+            context_variables={},
+            stream=False,
+            debug=True,  # Activamos el debug de Swarm
         )
 
-        if stream:
-            response = process_and_print_streaming_response(response)
-        else:
-            pretty_print_messages(response.messages)
+        # Agregar las respuestas al historial y enviarlas al usuario
+        for message in response.messages:
+            if message["role"] in ["assistant", "function"]:
+                if message.get("content"):
+                    context.user_data["messages"].append(message)
+                    await update.message.reply_text(message["content"])
 
-        messages.extend(response.messages)
-        agent = response.agent
+    except Exception as e:
+        print(f"Error en el procesamiento del mensaje: {str(e)}")  # Debug
+        await update.message.reply_text(
+            "Lo siento, hubo un error al procesar tu mensaje."
+        )
+
+
+async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja errores"""
+    print(f"Update {update} causó el error {context.error}")
+    print(f"Error completo:", exc_info=True)  # Esto mostrará el traceback completo
+
+
+if __name__ == "__main__":
+    # Cargar token de Telegram desde variables de entorno
+    load_dotenv()
+    TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+    print("Iniciando bot...")
+    app = Application.builder().token(TOKEN).build()
+
+    # Comandos
+    app.add_handler(CommandHandler("start", start_command))
+
+    # Mensajes
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # Errores
+    app.add_error_handler(error)
+
+    # Iniciar el bot
+    print("Bot iniciado...")
+    app.run_polling(poll_interval=3)
