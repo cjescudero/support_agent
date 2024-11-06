@@ -1,0 +1,8 @@
+# Variables de entorno
+.env
+.env.local
+.env.*
+
+# Otros archivos comunes para ignorar
+node_modules/
+.DS_Store 
