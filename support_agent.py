@@ -6,6 +6,8 @@ from telegram import Update
 from telegram.ext import ContextTypes
 import os
 from dotenv import load_dotenv
+import argparse
+from instructions import instructions
 
 
 def search_customer_by_dni(dni: str) -> dict:
@@ -75,7 +77,7 @@ def transfer_to_receptionist_agent():
 
 receptionist_agent = Agent(
     name="Agent",
-    instructions="You are a helpful agent of a insurance borker agency. Answer the user's question in the same language as the question.",
+    instructions=instructions,
     functions=[transfer_to_customer_agent],
 )
 
@@ -89,13 +91,13 @@ customer_agent = Agent(
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja el comando /start"""
     await update.message.reply_text(
-        "¡Hola! Soy el asistente virtual de la agencia de seguros. ¿En qué puedo ayudarte?"
+        "¡Hola! Soy el asistente virtual de la agencia de seguros Diego Lozano. ¿En qué puedo ayudarte?"
     )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los mensajes entrantes de Telegram"""
-    print("Mensaje recibido:", update.message)  # Debug
+    # print("Mensaje recibido:", update.message)  # Debug
 
     # Obtener el mensaje del usuario
     user_input = update.message.text
@@ -110,11 +112,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Inicializar el historial de mensajes en el contexto si no existe
     if "messages" not in context.user_data:
         context.user_data["messages"] = []
-        print("Inicializando nuevo historial de mensajes")  # Debug
+        # print("Inicializando nuevo historial de mensajes")  # Debug
 
     # Agregar el mensaje del usuario al historial
     context.user_data["messages"].append({"role": "user", "content": user_input})
-    print("Historial actual:", context.user_data["messages"])  # Debug
+    # print("Historial actual:", context.user_data["messages"])  # Debug
 
     try:
         client = Swarm()
@@ -125,7 +127,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             messages=context.user_data["messages"],
             context_variables={},
             stream=False,
-            debug=True,  # Activamos el debug de Swarm
+            debug=debug_print.enabled,  # Debug de Swarm
         )
 
         # Agregar las respuestas al historial y enviarlas al usuario
@@ -148,12 +150,37 @@ async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Error completo:", exc_info=True)  # Esto mostrará el traceback completo
 
 
+def parse_arguments():
+    """Configura y parsea los argumentos de línea de comandos"""
+    parser = argparse.ArgumentParser(description="Bot de asistencia para seguros")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        default=False,
+        help="Activa el modo debug para mostrar mensajes de depuración",
+    )
+    return parser.parse_args()
+
+
+def debug_print(*args, **kwargs):
+    """Función auxiliar para imprimir mensajes de depuración"""
+    if debug_print.enabled:
+        print(*args, **kwargs)
+
+
+debug_print.enabled = False
+
+
 if __name__ == "__main__":
+    # Parsear argumentos de línea de comandos
+    args = parse_arguments()
+    debug_print.enabled = args.debug
+
     # Cargar token de Telegram desde variables de entorno
     load_dotenv()
     TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-    print("Iniciando bot...")
+    debug_print("Iniciando bot...")
     app = Application.builder().token(TOKEN).build()
 
     # Comandos
